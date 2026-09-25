@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+POLICY="${POLICY:-/etc/focusguard/policy.conf}"
+STATE=/run/focusguard
+DRY_RUN="${DRY_RUN:-0}"
+
+# shellcheck source=/etc/focusguard/policy.conf
+# shellcheck disable=SC1091
+. "$POLICY"
+# shellcheck disable=SC1091
+. /usr/local/lib/focusguard/common.sh
+
+uid=$(id -u "$USER")
+now=$(( 10#$(date +%H) * 60 + 10#$(date +%M) ))
+dow=$(date +%u)
+[ "$dow" -le 5 ] && windows="$ALLOWED_WD" || windows="$ALLOWED_WK"
+
+to_min()   { echo $(( 10#${1:0:2} * 60 + 10#${1:2:2} )); }
+from_min() { printf '%02d:%02d' $(( $1 / 60 )) $(( $1 % 60 )); }
+log() { fg_audit "$*"; }
+mkdir -p "$STATE"
+
+RESUME_GRACE="${RESUME_GRACE:-60}"
+if [ -e "$STATE/resumed" ]; then
+  age=$(( $(date +%s) - $(stat -c %Y "$STATE/resumed" 2>/dev/null || echo 0)))
+  if [ "$age" -lt "$RESUME_GRACE" ]; then
+    log "skip reason=recent-resume age=$age"
+    exit 0
+  fi
+fi
+
+recover_greeter() {
+  local tries="${GREETER_TRIES:-20}" i
+  for ((i = 1; i <= tries; i++)); do
+    sleep 2
+    # 1) esperar a que el usuario expulsado ya no tenga sesion
+    loginctl show-user "$USER" >/dev/null 2>&1 && continue
+    # 2) y que exista una sesion en un seat (el greeter de SDDM)
+    if loginctl list-sessions --no-legend 2>/dev/null | awk '{print $4}' | grep -q 'seat'; then
+      log "greeter-ok intent=$i"
+      return 0
+    fi
+  done
+  log "greeter-recovery: reinicio display-manager"
+  systemctl restart display-manager.service 2>/dev/null || true
+}
+
+notify_user() {
+  local msg="$1"
+  [ -S "/run/user/$uid/bus" ] || return 0
+  local wl
+  wl=$(basename "$(compgen -G "/run/user/$uid/wayland-*" | head -n1)")
+  runuser -u "$USER" -- env \
+    XDG_RUNTIME_DIR="/run/user/$uid" \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
+    WAYLAND_DISPLAY="$wl" \
+    notify-send -u critical FocusGuard "$msg" || true
+}
+
+inside=0; wnd_end=""
+for w in $windows; do
+  s=$(to_min "${w%-*}"); e=$(to_min "${w#*-}")
+  if [ "$now" -ge "$s" ] && [ "$now" -lt "$e" ]; then inside=1; wnd_end="$e"; fi
+done
+
+has_session=0
+if loginctl show-user "$USER" >/dev/null 2>&1; then has_session=1; fi
+prev_session=$(cat "$STATE/session" 2>/dev/null || echo 0)
+echo "$has_session" > "$STATE/session"
+
+if [ "$inside" -eq 1 ]; then
+  window_key="$(date +%F)-$wnd_end"
+  if [ "$(cat "$STATE/window" 2>/dev/null || true)" != "$window_key" ]; then
+    echo "$window_key" > "$STATE/window"
+    rm -f "$STATE"/warn-* "$STATE/killed"
+  fi
+
+  if [ "$has_session" -eq 1 ] && [ "$prev_session" != "1" ]; then
+    notify_user "Uso permitido hasta las $(from_min "$wnd_end")"
+    log "session-start user=$USER until=$(from_min "$wnd_end")"
+  fi
+
+  remaining=$(( wnd_end - now ))
+  for m in $WARN_MINUTES; do
+    if [ "$remaining" -eq "$m" ] && [ ! -e "$STATE/warn-$m" ]; then
+      notify_user "Faltan $m minutos para el bloqueo"
+      touch "$STATE/warn-$m"
+      log "warn user=$USER remaining=$m"
+    fi
+  done
+else
+  if [ "$has_session" -eq 1 ]; then
+    if [ ! -e "$STATE/killed" ]; then
+      notify_user "Tiempo terminado"
+      log "stop user=$USER dry_run=$DRY_RUN"
+      if [ "$DRY_RUN" != "1" ]; then
+        loginctl terminate-user "$USER" || true
+        recover_greeter
+      fi
+      touch "$STATE/killed"
+    fi
+  fi
+fi

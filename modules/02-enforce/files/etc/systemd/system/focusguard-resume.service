@@ -1,0 +1,11 @@
+[Unit]
+Description=FocusGuard: marcar hora de resume
+After=suspend.target hibernate.target hybrid-sleep.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/install -d /run/focusguard
+ExecStart=/usr/bin/touch /run/focusguard/resumed
+
+[Install]
+WantedBy=suspend.target hibernate.target hybrid-sleep.target

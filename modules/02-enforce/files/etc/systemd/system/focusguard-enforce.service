@@ -1,0 +1,7 @@
+[Unit]
+Description=FocusGuard enforcement (notify, terminate session)
+
+[Service]
+Type=oneshot
+TimeoutStartSec=120
+ExecStart=/usr/local/bin/focusguard-enforce

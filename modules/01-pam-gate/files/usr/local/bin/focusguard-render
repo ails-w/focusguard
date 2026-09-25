@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+POLICY="${POLICY:-/etc/focusguard/policy.conf}"
+# shellcheck source=/etc/focusguard/policy.conf
+# shellcheck disable=SC1091
+. "$POLICY"
+
+# pam_time: "Wk" = semana (lun-vie) · "Wd" = fin de semana (sab-dom).
+# (Verificado en pam_time.c: days[] -> wk=076=mo|tu|we|th|fr, wd=0101=su|sa)
+line="$SERVICES;$TTY;$USER;"
+sep=""
+for w in $ALLOWED_WD; do line+="${sep}Wk$w"; sep=" | "; done
+for w in $ALLOWED_WK; do line+="${sep}Wd$w"; sep=" | "; done
+printf '%s\n' "$line"

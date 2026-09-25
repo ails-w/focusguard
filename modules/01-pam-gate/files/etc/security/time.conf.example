@@ -1,0 +1,7 @@
+# Bloque de reglas que focusguard-apply mantiene en /etc/security/time.conf.
+# Formato de pam_time:  servicios;ttys;usuarios;horarios
+# Wk = semana (lun-vie) · Wd = fin de semana (sab-dom)
+
+# BEGIN focusguard
+sddm|login|sshd|sudo;*;alice;Wk0700-0900 | Wk1800-2200 | Wd1000-1400
+# END focusguard

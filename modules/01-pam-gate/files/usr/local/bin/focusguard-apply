@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Regenera el bloque de focusguard en /etc/security/time.conf a partir de policy.conf.
+# Deja el resto del archivo intacto y reemplaza solo lo que hay entre los marcadores.
+set -euo pipefail
+
+POLICY="${POLICY:-/etc/focusguard/policy.conf}"
+TIMECONF="${TIMECONF:-/etc/security/time.conf}"
+RENDER="${RENDER:-/usr/local/bin/focusguard-render}"
+BEGIN="# BEGIN focusguard"
+END="# END focusguard"
+
+[ -r "$POLICY" ] || { echo "No existe $POLICY" >&2; exit 1; }
+[ -f "$TIMECONF" ] || { echo "No existe $TIMECONF" >&2; exit 1; }
+
+line="$("$RENDER")"
+
+tmp="$(mktemp)"
+chattr -i "$TIMECONF" 2>/dev/null || true
+awk -v b="$BEGIN" -v e="$END" '
+  $0==b {skip=1; next}
+  $0==e {skip=0; next}
+  !skip {print}
+' "$TIMECONF" > "$tmp"
+printf "%s\n%s\n%s\n" "$BEGIN" "$line" "$END" >> "$tmp"
+install -m 0644 -o root -g root "$tmp" "$TIMECONF"
+rm -f "$tmp"
+
+echo "time.conf actualizado desde policy.conf:"
+echo "  $line"

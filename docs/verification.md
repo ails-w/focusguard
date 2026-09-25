@@ -2,7 +2,8 @@
 
 Cómo comprobar cada capa. Si una falla, no sigas.
 
-> Automatización: `scripts/verify.sh` (pendiente). Ejecuta esta batería a mano por ahora.
+> Automatización: `scripts/verify.sh` reproduce esta batería. Los comandos de abajo son
+> para inspeccionar cada capa a mano cuando algo falla.
 
 ## Capa 1 — Puerta PAM
 

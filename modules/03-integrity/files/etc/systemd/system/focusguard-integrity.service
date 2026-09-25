@@ -1,0 +1,6 @@
+[Unit]
+Description=FocusGuard config integrity check
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/focusguard-integrity

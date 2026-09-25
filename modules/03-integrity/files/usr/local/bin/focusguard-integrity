@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+GOLDEN=/etc/focusguard/golden
+# shellcheck disable=SC1091
+. /usr/local/lib/focusguard/common.sh
+
+for live in /etc/focusguard/policy.conf /etc/security/time.conf; do
+  golden="$GOLDEN/$(basename "$live")"
+  [ -f "$golden" ] || continue
+
+  if ! cmp -s "$golden" "$live"; then
+    chattr -i "$live" 2>/dev/null || true
+    cp -a "$golden" "$live"
+    chattr +i "$live" 2>/dev/null || true
+    fg_audit "integrity-restore file=$live"
+    continue
+  fi
+
+  if ! lsattr -d "$live" 2>/dev/null | cut -d' ' -f1 | grep -q i; then
+    chattr +i "$live" 2>/dev/null || true
+    fg_audit "integrity-relock file=$live"
+  fi
+done

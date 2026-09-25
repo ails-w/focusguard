@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+GOLDEN=/etc/focusguard/golden
+install -d -m 0755 "$GOLDEN"
+# shellcheck disable=SC1091
+. /usr/local/lib/focusguard/common.sh
+
+for live in /etc/focusguard/policy.conf /etc/security/time.conf; do
+  golden="$GOLDEN/$(basename "$live")"
+  chattr -i "$live" "$golden" 2>/dev/null || true
+  cp -a "$live" "$golden"
+  chattr +i "$live" "$golden" 2>/dev/null || true
+done
+
+fg_audit "config-locked"
+echo "Config bloqueada (golden actualizada)."
